@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 import networkx as nx
+import heapq
 
 class Graph:
     def __init__(self):
@@ -22,51 +23,96 @@ class Graph:
         self.graph[u][v] = w
         self.graph[v][u] = w
 
-def read_input(filename: str) -> Tuple[Graph, List[Tuple[int, str, int]]]:
-    with open(filename, 'r') as f:
-        n_connections = int(f.readline().strip().split()[0])
-        destinations = f.readline().strip().split(', ')
-        
-        graph = Graph()
-        for i in range(n_connections):
-            row = list(map(int, f.readline().strip().split(', ')))
-            for j in range(n_connections):
-                if row[j] != 0:
-                    graph.add_edge(destinations[i], destinations[j], row[j])
-        
-        n_deliveries = int(f.readline().strip().split()[0])
-        deliveries = []
-        for _ in range(n_deliveries):
-            start, dest, bonus = f.readline().strip().split(', ')
-            deliveries.append((int(start), dest, int(bonus)))
-    
-    return graph, deliveries
+def dijkstra(graph: Graph, start: str, end: str) -> List[str]:
+    if start not in graph.graph or end not in graph.graph:
+        return []
 
-# Versão 1: Algoritmo Básico
-def basic_delivery_auction(graph: Graph, deliveries: List[Tuple[int, str, int]]) -> List[Tuple[int, str, int]]:
+    distances = {node: float('infinity') for node in graph.graph}
+    distances[start] = 0
+    previous = {node: None for node in graph.graph}
+    pq = [(0, start)]
+
+    while pq:
+        current_distance, current_node = heapq.heappop(pq)
+
+        if current_node == end:
+            path = []
+            while current_node:
+                path.append(current_node)
+                current_node = previous[current_node]
+            return path[::-1]
+
+        if current_distance > distances[current_node]:
+            continue
+
+        for neighbor, weight in graph.graph[current_node].items():
+            distance = current_distance + weight
+            if distance < distances[neighbor]:
+                distances[neighbor] = distance
+                previous[neighbor] = current_node
+                heapq.heappush(pq, (distance, neighbor))
+
+    return []
+
+def basic_delivery_auction(graph: Graph, deliveries: List[Tuple[int, str, int]]) -> Tuple[List[Tuple[int, str, int]], int]:
     selected_deliveries = []
     current_time = 0
-    current_location = next(iter(graph.graph)) 
+    current_location = next(iter(graph.graph))
     total_bonus = 0
 
-    for start_time, destination, bonus in deliveries:
+    sorted_deliveries = sorted(deliveries, key=lambda x: x[0])
+
+    for start_time, destination, bonus in sorted_deliveries:
         if current_time <= start_time:
-            if current_location not in graph.graph or destination not in graph.graph[current_location]:
-                print(f"Aviso: Não há conexão direta entre {current_location} e {destination}")
+            path = dijkstra(graph, current_location, destination)
+            if not path:
                 continue
-            travel_time = graph.graph[current_location][destination]
-            arrival_time = max(current_time + travel_time, start_time + travel_time)
-            selected_deliveries.append((arrival_time, destination, bonus))
-            total_bonus += bonus
-            current_time = arrival_time
-            current_location = destination
+
+            travel_time = sum(graph.graph[path[i]][path[i+1]] for i in range(len(path)-1))
+            arrival_time = max(current_time, start_time) + travel_time
+
+            if arrival_time <= start_time + 10:
+                selected_deliveries.append((arrival_time, destination, bonus))
+                total_bonus += bonus
+                current_time = arrival_time
+                current_location = destination
+
+                return_path = dijkstra(graph, destination, next(iter(graph.graph)))
+                if return_path:
+                    return_time = sum(graph.graph[return_path[i]][return_path[i+1]] for i in range(len(return_path)-1))
+                    current_time += return_time
+                    current_location = next(iter(graph.graph))
 
     return selected_deliveries, total_bonus
 
-# Versão 2: Algoritmo com IA (Simulated Annealing)
 def simulated_annealing(graph: Graph, deliveries: List[Tuple[int, str, int]], initial_temp=1000, cooling_rate=0.995, iterations=1000):
     def calculate_total_bonus(solution):
-        return sum(bonus for _, _, bonus in solution)
+        total_bonus = 0
+        current_time = 0
+        current_location = next(iter(graph.graph))
+
+        for start_time, destination, bonus in solution:
+            path = dijkstra(graph, current_location, destination)
+            if not path:
+                continue
+
+            travel_time = sum(graph.graph[path[i]][path[i+1]] for i in range(len(path)-1))
+            arrival_time = max(current_time, start_time) + travel_time
+
+            if arrival_time <= start_time + 10:
+                total_bonus += bonus
+                current_time = arrival_time
+                current_location = destination
+
+                return_path = dijkstra(graph, destination, next(iter(graph.graph)))
+                if return_path:
+                    return_time = sum(graph.graph[return_path[i]][return_path[i+1]] for i in range(len(return_path)-1))
+                    current_time += return_time
+                    current_location = next(iter(graph.graph))
+            else:
+                break
+
+        return total_bonus
 
     def generate_neighbor(solution):
         i, j = random.sample(range(len(solution)), 2)
@@ -74,7 +120,7 @@ def simulated_annealing(graph: Graph, deliveries: List[Tuple[int, str, int]], in
         new_solution[i], new_solution[j] = new_solution[j], new_solution[i]
         return new_solution
 
-    current_solution = deliveries[:]
+    current_solution = sorted(deliveries, key=lambda x: x[0])
     best_solution = current_solution
     current_bonus = calculate_total_bonus(current_solution)
     best_bonus = current_bonus
@@ -97,58 +143,12 @@ def simulated_annealing(graph: Graph, deliveries: List[Tuple[int, str, int]], in
 
     return best_solution, best_bonus
 
-def main(input_file: str):
-    graph, deliveries = read_input(input_file)
-    
-    # Versão 1: Algoritmo Básico
-    start_time = time.time()
-    basic_results, basic_bonus = basic_delivery_auction(graph, deliveries)
-    basic_time = time.time() - start_time
-
-    # Versão 2: Algoritmo com IA
-    start_time = time.time()
-    ai_results, ai_bonus = simulated_annealing(graph, deliveries)
-    ai_time = time.time() - start_time
-
-    print("Resultados do Algoritmo Básico:")
-    for arrival_time, destination, bonus in basic_results:
-        print(f"({arrival_time}, {destination}; {bonus})")
-    print(f"Lucro total: {basic_bonus}")
-    print(f"Tempo de execução: {basic_time:.4f} segundos\n")
-
-    print("Resultados do Algoritmo com IA:")
-    for arrival_time, destination, bonus in ai_results:
-        print(f"({arrival_time}, {destination}; {bonus})")
-    print(f"Lucro total: {ai_bonus}")
-    print(f"Tempo de execução: {ai_time:.4f} segundos")
-
-    plt.figure(figsize=(10, 5))
-    plt.bar(['Básico', 'IA'], [basic_bonus, ai_bonus])
-    plt.title('Comparação de Lucro')
-    plt.ylabel('Lucro Total')
-    plt.savefig('lucro_comparacao.png')
-    plt.close()
-
-    plt.figure(figsize=(10, 5))
-    plt.bar(['Básico', 'IA'], [basic_time, ai_time])
-    plt.title('Comparação de Tempo de Execução')
-    plt.ylabel('Tempo (segundos)')
-    plt.savefig('tempo_comparacao.png')
-    plt.close()
-
 class DeliveryAuctionSimulation:
     def __init__(self, master):
         self.master = master
         self.master.title("Simulação de Leilão de Entregas")
 
         self.graph = nx.Graph()
-        self.graph.add_nodes_from(['s', 'd', 'a', 'e', 'f'])
-        self.graph.add_edge('s', 'd', weight=1)
-        self.graph.add_edge('s', 'a', weight=1)
-        self.graph.add_edge('d', 'a', weight=1)
-        self.graph.add_edge('d', 'e', weight=1)
-        self.graph.add_edge('d', 'f', weight=1)
-        self.graph.add_edge('e', 'f', weight=1)
         self.deliveries = []
 
         self.create_widgets()
@@ -268,9 +268,6 @@ class DeliveryAuctionSimulation:
         ttk.Label(result_window, text=f"Lucro total: {ai_bonus}").pack()
 
 if __name__ == "__main__":
-    if len(sys.argv) == 2:
-        main(sys.argv[1])
-    else:
-        root = tk.Tk()
-        app = DeliveryAuctionSimulation(root)
-        root.mainloop()
+    root = tk.Tk()
+    app = DeliveryAuctionSimulation(root)
+    root.mainloop()
