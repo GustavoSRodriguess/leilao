@@ -1,7 +1,7 @@
 import sys
 import time
 import random
-import math  # Add this line to import the math module
+import math 
 from typing import List, Tuple, Dict
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -46,7 +46,7 @@ def read_input(filename: str) -> Tuple[Graph, List[Tuple[int, str, int]]]:
 def basic_delivery_auction(graph: Graph, deliveries: List[Tuple[int, str, int]]) -> List[Tuple[int, str, int]]:
     selected_deliveries = []
     current_time = 0
-    current_location = next(iter(graph.graph))  # Pega o primeiro nó do grafo
+    current_location = next(iter(graph.graph)) 
     total_bonus = 0
 
     for start_time, destination, bonus in deliveries:
@@ -97,7 +97,6 @@ def simulated_annealing(graph: Graph, deliveries: List[Tuple[int, str, int]], in
 
     return best_solution, best_bonus
 
-# Função principal
 def main(input_file: str):
     graph, deliveries = read_input(input_file)
     
@@ -123,7 +122,6 @@ def main(input_file: str):
     print(f"Lucro total: {ai_bonus}")
     print(f"Tempo de execução: {ai_time:.4f} segundos")
 
-    # Comparação de desempenho
     plt.figure(figsize=(10, 5))
     plt.bar(['Básico', 'IA'], [basic_bonus, ai_bonus])
     plt.title('Comparação de Lucro')
@@ -138,7 +136,6 @@ def main(input_file: str):
     plt.savefig('tempo_comparacao.png')
     plt.close()
 
-# Simulação gráfica interativa
 class DeliveryAuctionSimulation:
     def __init__(self, master):
         self.master = master
